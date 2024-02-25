@@ -1,22 +1,45 @@
 package main
 
 import (
-	"flag"
+	"encoding/json"
 	"fmt"
-	"os"
+	"io"
+	"log"
+	"net/http"
+
+	"github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
 )
 
+const API_URL = "http://transitdata.cityofmadison.com/TripUpdate/TripUpdates.json"
+
 func main() {
-	domain := flag.String("domain", "", "The domain to perform WHOIS lookup on")
+	client := &http.Client{}
 
-	flag.CommandLine.SetOutput(os.Stderr)
-	flag.Parse()
+	request, err := http.NewRequest("GET", API_URL, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer response.Body.Close()
 
-	if *domain == "" {
-		fmt.Fprintln(os.Stderr, "Error: 'domain' argument is required")
-		flag.Usage()
-		return
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Performing mock WHOIS lookup for: %s\n", *domain)
+	feed := gtfs.FeedMessage{}
+	err = json.Unmarshal(body, &feed)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, entity := range feed.Entity {
+		tripUpdate := entity.GetTripUpdate()
+		trip := tripUpdate.GetTrip()
+		tripId := trip.GetTripId()
+		fmt.Printf("Trip ID: %s\n", tripId)
+	}
 }
